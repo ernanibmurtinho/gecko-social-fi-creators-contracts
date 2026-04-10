@@ -1,0 +1,14 @@
+{
+  "name": "Gecko",
+  "project_url": "https://app.geckovision.tech",
+  "contacts": [
+    "mailto:security@geckovision.tech",
+    "https://github.com/ernanibmurtinho/gecko-social-fi-creators-contracts/security/advisories/new"
+  ],
+  "policy": "https://github.com/ernanibmurtinho/gecko-social-fi-creators-contracts/blob/main/SECURITY.md",
+  "preferred_languages": ["en", "pt"],
+  "source_code": "https://github.com/ernanibmurtinho/gecko-social-fi-creators-contracts",
+  "auditors": [],
+  "acknowledgements": "We appreciate responsible disclosure of any vulnerabilities found in the Gecko protocol.",
+  "expiry": "2027-04-10"
+}
