@@ -13,14 +13,35 @@ declare_id!("Eeyc1AXnQxmbMoKhJRz8g6soBpCkjwfi79DrhWwNeSh3");
 pub mod gecko_vault {
     use super::*;
 
+    /// One-time migration to expand the GeckoConfig PDA to the current layout and
+    /// set the oracle_authority field (needed if config was initialized before V2).
+    pub fn migrate_config(
+        ctx: Context<MigrateConfig>,
+        oracle_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::migrate_config::process(ctx, oracle_authority)
+    }
+
+    /// Repair GeckoConfig fields corrupted by migrate_config overwriting the
+    /// fee_bps/bump/allowed_mints region. Writes all V3 fields at correct offsets.
+    /// One-time devnet recovery instruction — callable only by the stored authority.
+    pub fn repair_config(
+        ctx: Context<RepairConfig>,
+        oracle_authority: Pubkey,
+        allowed_mints: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::repair_config::process(ctx, oracle_authority, allowed_mints)
+    }
+
     /// Initialize the singleton protocol config (admin only, called once after deploy).
     pub fn init_config(
         ctx: Context<InitConfig>,
         treasury: Pubkey,
         automation_authority: Pubkey,
+        oracle_authority: Pubkey,
         allowed_mints: Vec<Pubkey>,
     ) -> Result<()> {
-        instructions::init_config::process(ctx, treasury, automation_authority, allowed_mints)
+        instructions::init_config::process(ctx, treasury, automation_authority, oracle_authority, allowed_mints)
     }
 
     /// Sponsor creates a new campaign vault.
@@ -43,6 +64,7 @@ pub mod gecko_vault {
     }
 
     /// Add a creator to the vault's squad with a yield allocation.
+    /// Also initializes the creator's SquadScore PDA for this vault.
     ///
     /// `allocation_bps`: this creator's share in basis points (e.g. 5000 = 50%).
     /// All members' allocations must sum to 10_000 before route_yield works.
@@ -66,5 +88,89 @@ pub mod gecko_vault {
     /// Sponsor reclaims locked principal after the cliff period.
     pub fn close_vault(ctx: Context<CloseVault>) -> Result<()> {
         instructions::close_vault::process(ctx)
+    }
+
+    // ─── V2: Score & Milestones ───────────────────────────────────────────────
+
+    /// Update a creator's performance score for a vault (oracle only).
+    pub fn update_score(
+        ctx: Context<UpdateScore>,
+        score: u8,
+        campaigns_completed: u16,
+        approval_rate: u8,
+        on_time_delivery: u8,
+    ) -> Result<()> {
+        instructions::update_score::process(ctx, score, campaigns_completed, approval_rate, on_time_delivery)
+    }
+
+    /// Create a performance milestone bonus for a vault (sponsor only).
+    pub fn create_milestone(
+        ctx: Context<CreateMilestone>,
+        description: String,
+        score_threshold: u8,
+        payout_bps: u16,
+        target_creator: Pubkey,
+        index: u8,
+    ) -> Result<()> {
+        instructions::create_milestone::process(ctx, description, score_threshold, payout_bps, target_creator, index)
+    }
+
+    /// Release a milestone payout when the creator meets the score threshold (automation only).
+    pub fn release_milestone(ctx: Context<ReleaseMilestone>) -> Result<()> {
+        instructions::release_milestone::process(ctx)
+    }
+
+    /// Create a performance milestone signed by Gecko automation authority.
+    ///
+    /// Allows score_threshold=0 (always-true, used for advance payments).
+    /// Automation keypair pays rent — sponsor signature not required.
+    pub fn create_milestone_by_automation(
+        ctx: Context<CreateMilestoneByAutomation>,
+        description: String,
+        score_threshold: u8,
+        payout_bps: u16,
+        target_creator: Pubkey,
+        index: u8,
+    ) -> Result<()> {
+        instructions::create_milestone_by_automation::process(
+            ctx,
+            description,
+            score_threshold,
+            payout_bps,
+            target_creator,
+            index,
+        )
+    }
+
+    // ─── V3: Reputation & Confidence Pool ────────────────────────────────────
+
+    /// Update a creator's global reputation across all campaigns (oracle only).
+    pub fn update_reputation(
+        ctx: Context<UpdateReputation>,
+        global_score: u8,
+        total_campaigns: u16,
+        total_yield_earned: u64,
+    ) -> Result<()> {
+        instructions::update_reputation::process(ctx, global_score, total_campaigns, total_yield_earned)
+    }
+
+    /// Open a community confidence pool for a vault campaign (sponsor only).
+    pub fn open_pool(ctx: Context<OpenPool>) -> Result<()> {
+        instructions::open_pool::process(ctx)
+    }
+
+    /// Place a YES or NO bet in a confidence pool.
+    pub fn stake(ctx: Context<Stake>, side: bool, amount: u64) -> Result<()> {
+        instructions::stake::process(ctx, side, amount)
+    }
+
+    /// Settle a confidence pool with the final outcome (oracle only).
+    pub fn settle_pool(ctx: Context<SettlePool>, outcome: bool) -> Result<()> {
+        instructions::settle_pool::process(ctx, outcome)
+    }
+
+    /// Claim winnings from a settled confidence pool.
+    pub fn claim_winnings(ctx: Context<ClaimWinnings>) -> Result<()> {
+        instructions::claim_winnings::process(ctx)
     }
 }
