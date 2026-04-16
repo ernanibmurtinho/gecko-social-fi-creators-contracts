@@ -199,7 +199,7 @@ describe("gecko-vault", () => {
   describe("init_config", () => {
     it("admin initializes protocol config", async () => {
       await program.methods
-        .initConfig(treasury.publicKey, automation.publicKey, [testMint])
+        .initConfig(treasury.publicKey, automation.publicKey, admin.publicKey, [testMint])
         .accounts({
           config: configAddress,
           authority: admin.publicKey,
@@ -220,7 +220,7 @@ describe("gecko-vault", () => {
     it("fails: duplicate init_config (already initialized)", async () => {
       try {
         await program.methods
-          .initConfig(treasury.publicKey, automation.publicKey, [testMint])
+          .initConfig(treasury.publicKey, automation.publicKey, admin.publicKey, [testMint])
           .accounts({
             config: configAddress,
             authority: admin.publicKey,
@@ -1494,6 +1494,141 @@ describe("gecko-vault", () => {
      Creator2 received: ${creator2TotalReceived} tokens over 3 epochs
      Principal returned to sponsor: ${returned} tokens
       `);
+    });
+  });
+
+  // =========================================================================
+  // V4 — create_milestone_by_automation
+  // =========================================================================
+
+  describe("V4 — create_milestone_by_automation", () => {
+    let vault: PublicKey;
+
+    before(() => {
+      // Reuse vault3 (campaign_id=3) which is funded and has members
+      [vault] = vaultPda(sponsor.publicKey, new BN(3), program.programId);
+    });
+
+    it("automation keypair creates a milestone with score_threshold=0", async () => {
+      const milestoneIndex = 5;
+      const [milestonePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("milestone"), vault.toBuffer(), Buffer.from([milestoneIndex])],
+        program.programId
+      );
+
+      await program.methods
+        .createMilestoneByAutomation(
+          "Advance payment",
+          0,
+          1000,
+          creator1.publicKey,
+          milestoneIndex,
+        )
+        .accounts({
+          vault,
+          milestone: milestonePda,
+          config: configAddress,
+          automation: automation.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([automation])
+        .rpc();
+
+      const milestone = await program.account.performanceMilestone.fetch(milestonePda);
+      assert.equal(milestone.scoreThreshold, 0);
+      assert.equal(milestone.payoutBps, 1000);
+      assert.equal(milestone.status.pending !== undefined, true);
+    });
+
+    it("rejects if caller is not automation_authority", async () => {
+      const fake = Keypair.generate();
+      await airdrop(conn, fake.publicKey);
+      const milestoneIndex = 6;
+      const [milestonePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("milestone"), vault.toBuffer(), Buffer.from([milestoneIndex])],
+        program.programId
+      );
+
+      try {
+        await program.methods
+          .createMilestoneByAutomation("Bad actor", 0, 1000, creator1.publicKey, milestoneIndex)
+          .accounts({
+            vault,
+            milestone: milestonePda,
+            config: configAddress,
+            automation: fake.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([fake])
+          .rpc();
+        assert.fail("Should have thrown");
+      } catch (err: any) {
+        assert.include(err.message, "Unauthorized");
+      }
+    });
+  });
+
+  // =========================================================================
+  // V4 — init_and_deposit
+  // =========================================================================
+
+  describe("V4 — init_and_deposit", () => {
+    it("initializes vault and deposits in one transaction", async () => {
+      const campaignId = new BN(20);
+      const [vaultPdaAddr] = vaultPda(sponsor.publicKey, campaignId, program.programId);
+      const [vaultTokenPdaAddr] = vaultTokenPda(vaultPdaAddr, program.programId);
+
+      const depositAmount = new BN(1_000_000); // 1 USDC
+
+      await program.methods
+        .initAndDeposit(campaignId, CLIFF_SECONDS, END_SECONDS, depositAmount)
+        .accounts({
+          vault: vaultPdaAddr,
+          vaultTokenAccount: vaultTokenPdaAddr,
+          sponsorTokenAccount: sponsorAta,
+          mint: testMint,
+          config: configAddress,
+          sponsor: sponsor.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([sponsor])
+        .rpc();
+
+      const vaultData = await program.account.sponsorVault.fetch(vaultPdaAddr);
+      assert.equal(vaultData.principal.toString(), depositAmount.toString());
+      assert.equal(vaultData.campaignId.toString(), campaignId.toString());
+      assert.deepEqual(vaultData.status, { active: {} });
+
+      const tokenData = await getAccount(conn, vaultTokenPdaAddr);
+      assert.equal(tokenData.amount.toString(), depositAmount.toString());
+    });
+
+    it("fails: zero deposit amount", async () => {
+      const campaignId = new BN(21);
+      const [vaultPdaAddr] = vaultPda(sponsor.publicKey, campaignId, program.programId);
+      const [vaultTokenPdaAddr] = vaultTokenPda(vaultPdaAddr, program.programId);
+
+      await assertFails(
+        () =>
+          program.methods
+            .initAndDeposit(campaignId, CLIFF_SECONDS, END_SECONDS, new BN(0))
+            .accounts({
+              vault: vaultPdaAddr,
+              vaultTokenAccount: vaultTokenPdaAddr,
+              sponsorTokenAccount: sponsorAta,
+              mint: testMint,
+              config: configAddress,
+              sponsor: sponsor.publicKey,
+              tokenProgram: TOKEN_PROGRAM_ID,
+              associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+              systemProgram: SystemProgram.programId,
+            })
+            .signers([sponsor])
+            .rpc(),
+        "ZeroAmount"
+      );
     });
   });
 });

@@ -44,5 +44,7 @@ pub use claim_winnings::*;
 
 // V4
 pub mod create_milestone_by_automation;
+pub mod init_and_deposit;
 
 pub use create_milestone_by_automation::*;
+pub use init_and_deposit::*;

@@ -63,6 +63,20 @@ pub mod gecko_vault {
         instructions::deposit::process(ctx, amount)
     }
 
+    /// Initialize vault and deposit funds atomically (single sponsor signature).
+    ///
+    /// Equivalent to calling init_vault then deposit in sequence, but saves
+    /// one transaction — critical for the SDK's createCampaign() flow.
+    pub fn init_and_deposit(
+        ctx: Context<InitAndDeposit>,
+        campaign_id: u64,
+        cliff_seconds: i64,
+        end_seconds: i64,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::init_and_deposit::process(ctx, campaign_id, cliff_seconds, end_seconds, amount)
+    }
+
     /// Add a creator to the vault's squad with a yield allocation.
     /// Also initializes the creator's SquadScore PDA for this vault.
     ///
