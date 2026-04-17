@@ -16,6 +16,8 @@ pub struct SponsorVault {
     pub principal: u64,
     /// Cumulative yield routed to creators (lifetime)
     pub total_yield_routed: u64,
+    /// Yield harvested by Kamino and credited to vault but not yet distributed
+    pub accrued_yield: u64,
     /// Fee bps captured at vault creation (snapshot of protocol fee)
     pub gecko_fee_bps: u16,
     /// Unix timestamp after which the sponsor CAN close the vault

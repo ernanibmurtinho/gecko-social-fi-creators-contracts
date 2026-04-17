@@ -11,6 +11,8 @@ pub struct GeckoConfig {
     pub treasury: Pubkey,
     /// Signer authorized to call route_yield (Helius webhook relayer)
     pub automation_authority: Pubkey,
+    /// Signer authorized to call update_score, update_reputation, settle_pool (gecko-oracle service)
+    pub oracle_authority: Pubkey,
     /// Protocol fee in basis points (e.g. 200 = 2%)
     pub fee_bps: u16,
     pub bump: u8,

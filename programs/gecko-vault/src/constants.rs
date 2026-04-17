@@ -22,3 +22,13 @@ pub const CONFIG_SEED: &[u8] = b"config";
 pub const VAULT_SEED: &[u8] = b"vault";
 pub const MEMBER_SEED: &[u8] = b"member";
 pub const VAULT_TOKEN_SEED: &[u8] = b"vault_token";
+
+/// V2 PDA seeds
+pub const SCORE_SEED: &[u8] = b"score";
+pub const MILESTONE_SEED: &[u8] = b"milestone";
+
+/// V3 PDA seeds
+pub const REPUTATION_SEED: &[u8] = b"reputation";
+pub const POOL_SEED: &[u8] = b"pool";
+pub const POOL_TOKEN_SEED: &[u8] = b"pool_token";
+pub const BETTOR_SEED: &[u8] = b"bettor";

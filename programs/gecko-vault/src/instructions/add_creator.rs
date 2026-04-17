@@ -1,14 +1,17 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::{BPS_DENOMINATOR, MEMBER_SEED, VAULT_SEED},
+    constants::{BPS_DENOMINATOR, MEMBER_SEED, SCORE_SEED, VAULT_SEED},
     errors::GeckoError,
-    state::{SquadMember, SponsorVault, VaultStatus},
+    state::{SquadMember, SquadScore, SponsorVault, VaultStatus},
 };
 
 /// Add a creator to the vault's squad and assign their yield allocation.
 ///
 /// - `allocation_bps`: this creator's share of yield (e.g. 5000 = 50%)
+///
+/// Also initializes the creator's SquadScore PDA for this vault (score starts at 0,
+/// updated by the oracle service after first scoring epoch).
 ///
 /// The sum of all member allocation_bps must reach exactly 10_000 before
 /// route_yield can be called. Sponsors build the squad incrementally.
@@ -31,6 +34,7 @@ pub(crate) fn process(ctx: Context<AddCreator>, allocation_bps: u16) -> Result<(
 
     require!(new_total <= BPS_DENOMINATOR, GeckoError::TotalAllocationExceeded);
 
+    // Initialize SquadMember
     let member = &mut ctx.accounts.member;
     member.vault = ctx.accounts.vault.key();
     member.creator = ctx.accounts.creator.key();
@@ -38,6 +42,17 @@ pub(crate) fn process(ctx: Context<AddCreator>, allocation_bps: u16) -> Result<(
     member.stream_id = Pubkey::default(); // set when Streamflow stream is created
     member.total_received = 0;
     member.bump = ctx.bumps.member;
+
+    // Initialize SquadScore (starts at zero — oracle will update after first epoch)
+    let score = &mut ctx.accounts.score;
+    score.vault = ctx.accounts.vault.key();
+    score.creator = ctx.accounts.creator.key();
+    score.score = 0;
+    score.campaigns_completed = 0;
+    score.approval_rate = 0;
+    score.on_time_delivery = 0;
+    score.updated_at = Clock::get()?.unix_timestamp;
+    score.bump = ctx.bumps.score;
 
     let vault = &mut ctx.accounts.vault;
     vault.member_count = vault.member_count.checked_add(1).ok_or(GeckoError::Overflow)?;
@@ -72,6 +87,17 @@ pub struct AddCreator<'info> {
         bump,
     )]
     pub member: Account<'info, SquadMember>,
+
+    /// SquadScore PDA initialized alongside the member — oracle updates this after
+    /// each scoring epoch.
+    #[account(
+        init,
+        payer = sponsor,
+        space = 8 + SquadScore::INIT_SPACE,
+        seeds = [SCORE_SEED, vault.key().as_ref(), creator.key().as_ref()],
+        bump,
+    )]
+    pub score: Account<'info, SquadScore>,
 
     /// CHECK: Creator wallet — validated by PDA seed uniqueness.
     /// Using UncheckedAccount since creators may not have signed yet

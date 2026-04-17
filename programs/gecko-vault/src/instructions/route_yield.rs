@@ -152,21 +152,23 @@ pub struct RouteYield<'info> {
     )]
     pub member: Account<'info, SquadMember>,
 
-    /// Creator's token account — must be owned by the creator recorded in member PDA
+    /// Creator's token account — must be owned by the creator recorded in member PDA.
+    /// Boxed to keep RouteYield::try_accounts within the 4096-byte stack limit.
     #[account(
         mut,
         token::mint = mint,
         token::authority = member.creator,
     )]
-    pub creator_token_account: Account<'info, TokenAccount>,
+    pub creator_token_account: Box<Account<'info, TokenAccount>>,
 
-    /// Gecko treasury token account — must be owned by config.treasury
+    /// Gecko treasury token account — must be owned by config.treasury.
+    /// Boxed to keep RouteYield::try_accounts within the 4096-byte stack limit.
     #[account(
         mut,
         token::mint = mint,
         token::authority = config.treasury,
     )]
-    pub treasury_token_account: Account<'info, TokenAccount>,
+    pub treasury_token_account: Box<Account<'info, TokenAccount>>,
 
     #[account(
         seeds = [CONFIG_SEED],

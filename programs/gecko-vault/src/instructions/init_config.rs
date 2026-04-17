@@ -11,6 +11,7 @@ pub(crate) fn process(
     ctx: Context<InitConfig>,
     treasury: Pubkey,
     automation_authority: Pubkey,
+    oracle_authority: Pubkey,
     allowed_mints: Vec<Pubkey>,
 ) -> Result<()> {
     require!(!allowed_mints.is_empty(), crate::errors::GeckoError::UnsupportedMint);
@@ -19,6 +20,7 @@ pub(crate) fn process(
     config.authority = ctx.accounts.authority.key();
     config.treasury = treasury;
     config.automation_authority = automation_authority;
+    config.oracle_authority = oracle_authority;
     config.fee_bps = DEFAULT_FEE_BPS;
     config.bump = ctx.bumps.config;
     config.allowed_mints = allowed_mints;

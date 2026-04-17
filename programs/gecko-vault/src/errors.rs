@@ -46,4 +46,39 @@ pub enum GeckoError {
 
     #[msg("Unauthorized — only the vault sponsor can perform this action")]
     Unauthorized,
+
+    // V2 errors
+    #[msg("Score must be between 0 and 100")]
+    InvalidScore,
+
+    #[msg("Score threshold must be between 1 and 100")]
+    InvalidScoreThreshold,
+
+    #[msg("Milestone payout bps must be between 1 and 10000")]
+    InvalidMilestonePayoutBps,
+
+    #[msg("Milestone is not in pending state")]
+    MilestoneNotPending,
+
+    #[msg("Creator score does not meet milestone threshold")]
+    ScoreThresholdNotMet,
+
+    // V3 errors
+    #[msg("Confidence pool is not open")]
+    PoolNotOpen,
+
+    #[msg("Confidence pool is not settled")]
+    PoolNotSettled,
+
+    #[msg("Bet already claimed")]
+    AlreadyClaimed,
+
+    #[msg("Bettor is on the losing side")]
+    LosingBet,
+
+    #[msg("Confidence pool is already open")]
+    PoolAlreadyOpen,
+
+    #[msg("Invalid account data — cannot read expected fields")]
+    InvalidAccountData,
 }

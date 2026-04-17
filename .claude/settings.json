@@ -1,0 +1,72 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(anchor build*)",
+      "Bash(anchor test*)",
+      "Bash(anchor deploy*)",
+      "Bash(anchor idl*)",
+      "Bash(anchor keys*)",
+      "Bash(cargo build*)",
+      "Bash(cargo test*)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo fmt *)",
+      "Bash(cargo check *)",
+      "Bash(solana *)",
+      "Bash(cp target/idl/* ../gecko-social-fi-creators-api/src/idl/*)",
+      "Bash(cp target/types/* ../gecko-social-fi-creators-api/src/idl/*)"
+    ]
+  },
+
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"$CLAUDE_FILE_PATH\" ]; then exit 0; fi\ncase \"$CLAUDE_FILE_PATH\" in\n  *.rs)\n    command -v rustfmt >/dev/null 2>&1 && rustfmt \"$CLAUDE_FILE_PATH\" 2>/dev/null || true\n    ;;\nesac"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "when": {
+          "command_matches": "anchor test|cargo test"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"\"\necho \"📊 Test Summary:\"\nif [ \"$CLAUDE_TOOL_EXIT_CODE\" -eq 0 ]; then\n  echo \"✅ All tests passed!\"\nelse\n  echo \"❌ Some tests failed. Review output above.\"\nfi"
+          }
+        ]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "when": {
+          "command_matches": "git commit"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "set -e\ncd /home/nan/PycharmProjects/Gecko/gecko-social-fi-creators-contracts\necho \"🔍 Pre-commit: fmt + clippy...\"\ncargo fmt --check || { cargo fmt; exit 1; }\ncargo clippy --all-targets -- -D warnings || exit 1\necho \"✅ Pre-commit checks passed\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "when": {
+          "command_matches": "anchor deploy"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "set -e\necho \"🚨 PRE-DEPLOY CHECKS\"\nNETWORK=$(solana config get | grep 'RPC URL' | awk '{print $3}')\necho \"Network: $NETWORK\"\nif echo \"$NETWORK\" | grep -q mainnet; then\n  echo \"⚠️  MAINNET DEPLOY — type 'DEPLOY TO MAINNET' to continue:\"\n  read -r CONFIRM\n  [ \"$CONFIRM\" = \"DEPLOY TO MAINNET\" ] || exit 1\nfi\nls target/deploy/*.so >/dev/null 2>&1 || { echo \"❌ No .so build found — run anchor build first\"; exit 1; }\necho \"✅ Pre-deploy checks passed\""
+          }
+        ]
+      }
+    ]
+  }
+}
