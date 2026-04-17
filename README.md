@@ -40,16 +40,21 @@ This repo contains the **Anchor smart contract** (`gecko-vault`) deployed on Sol
 Deploy    Admin     anchor deploy → scripts/init-devnet.ts
                     → GeckoConfig: treasury, automation_authority, allowed_mints
 
-Day 0     Sponsor   init_vault (campaign_id, cliff_seconds, end_seconds)
-                    deposit (USDC/USDT → vault_token_account)
-                    add_creator × N  (allocation_bps, must sum to 10_000)
+Day 0     Sponsor   init_and_deposit (atomic: init vault + fund in one tx)  ← V4 SDK
+                    add_creator × N  (allocation_bps must sum to 10_000)
+                    → each add_creator also initializes SquadScore PDA
 
-Active    Epoch     route_yield (automation_authority signs, once per creator per epoch)
-                    → protocol fee → treasury
-                    → creator share → creator token account
+Active    Automation route_yield (once per creator per epoch)
+                    → protocol fee → treasury, creator share → creator wallet
+                    update_score → SquadScore PDA (oracle-provided engagement score)
+                    create_milestone + release_milestone (V2 performance tranches)
+                    update_reputation → ReputationAccount PDA (V3 cross-campaign)
 
-Close     Sponsor   close_vault (only after cliff_ts elapsed)
-                    → principal returned, vault_token_account closed, rent reclaimed
+Pool      Bettors   open_pool → stake (yes/no on campaign outcome)
+                    settle_pool → claim_winnings (V3 confidence pool)
+
+Close     Sponsor   close_vault (only after cliff_ts elapsed — enforced by Clock)
+                    → principal returned or proportionally distributed
 ```
 
 ### Roles and guarantees
@@ -69,16 +74,31 @@ Close     Sponsor   close_vault (only after cliff_ts elapsed)
 
 ```
 GeckoConfig ["config"]
-│   Singleton — admin, treasury, fee_bps, allowed_mints
+│   Singleton — admin, treasury, fee_bps, automation_authority, allowed_mints
 │
 └── SponsorVault ["vault", sponsor, campaign_id_le]
-    │   Principal, cliff_ts, end_ts, member_count, total_allocation_bps, status
+    │   principal, cliff_ts, end_ts, member_count, total_allocation_bps, status
     │
     ├── vault_token_account ["vault_token", vault]
     │   Program-owned SPL token account — holds locked principal
     │
-    └── SquadMember ["member", vault, creator]  × N
-            allocation_bps, total_received, stream_id (Phase 2)
+    ├── SquadMember ["member", vault, creator]  × N      (V1)
+    │       allocation_bps, total_received
+    │
+    ├── SquadScore ["score", vault, creator]  × N        (V2)
+    │       score, last_updated
+    │
+    ├── PerformanceMilestone ["milestone", vault, idx]   (V2)
+    │       amount, score_threshold, status (Pending|Released)
+    │
+    └── ConfidencePool ["pool", vault]                   (V3)
+            yes_total, no_total, outcome, settled
+
+ReputationAccount ["reputation", creator]               (V3, cross-vault)
+    total_campaigns, avg_score, total_earned
+
+BettorPda ["bettor", pool, bettor]                      (V3)
+    amount, side, claimed
 ```
 
 ### Vault lifecycle
@@ -102,15 +122,37 @@ Active ──(cliff_ts elapsed)──► close_vault ──► Closed
 
 ## Instruction reference
 
+### V1 — Vault lifecycle
+
 | Instruction | Signer | Key constraint |
 |-------------|--------|---------------|
 | `init_config` | Admin | One-time; initializes singleton |
-| `init_vault` | Sponsor | `cliff_seconds ≥ MIN_CLIFF_SECONDS`; mint must be in `allowed_mints` |
+| `migrate_config` / `repair_config` | Admin | Devnet state migration helpers |
+| `init_vault` | Sponsor | `cliff_seconds ≥ MIN_CLIFF_SECONDS`; mint in `allowed_mints` |
+| `init_and_deposit` | Sponsor | Atomic init + fund in one transaction (V4 SDK shortcut) |
 | `deposit` | Sponsor | Vault must be `Active`; increments `principal` |
-| `add_creator` | Sponsor | `total_allocation_bps + new ≤ 10_000` |
-| `remove_creator` | Sponsor | Cannot remove last member; frees allocation, closes PDA |
-| `route_yield` | Automation authority | `total_allocation_bps == 10_000`; balance check protects principal |
-| `close_vault` | Sponsor | `now ≥ cliff_ts`; closes token account, marks `Closed` |
+| `add_creator` | Sponsor | `total_allocation_bps + new ≤ 10_000`; initializes `SquadScore` PDA |
+| `remove_creator` | Sponsor | Frees allocation, closes `SquadMember` PDA |
+| `route_yield` | Automation authority | `total_allocation_bps == 10_000`; protects principal |
+| `close_vault` | Sponsor | `now ≥ cliff_ts`; distributes or refunds, marks `Closed` |
+
+### V2 — Performance milestones + oracle scoring
+
+| Instruction | Signer | Key constraint |
+|-------------|--------|---------------|
+| `update_score` | Automation authority | Writes `SquadScore` PDA per creator per vault |
+| `create_milestone` | Automation authority | Creates `PerformanceMilestone` PDA; `score_threshold` checked |
+| `release_milestone` | Automation authority | Transfers milestone amount to creator; marks `Released` |
+
+### V3 — Confidence pool + cross-campaign reputation
+
+| Instruction | Signer | Key constraint |
+|-------------|--------|---------------|
+| `update_reputation` | Automation authority | Writes `ReputationAccount` PDA per creator wallet |
+| `open_pool` | Sponsor | Creates `ConfidencePool` PDA tied to a vault |
+| `stake` | Bettor | Creates `BettorPda`; SOL staked on campaign outcome |
+| `settle_pool` | Automation authority | Resolves pool; marks winning side |
+| `claim_winnings` | Bettor | Transfers winnings to bettor; closes `BettorPda` |
 
 ---
 
